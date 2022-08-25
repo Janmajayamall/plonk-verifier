@@ -123,6 +123,7 @@ impl<C: Curve, L: Loader<C>> PlonkProof<C, L> {
         {
             return Err(Error::InvalidInstances);
         }
+
         for statements in statements.iter() {
             for statement in statements.iter() {
                 transcript.common_scalar(statement)?;

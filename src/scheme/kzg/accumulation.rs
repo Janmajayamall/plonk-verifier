@@ -7,6 +7,7 @@ use crate::{
 };
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 
+pub mod circom_plonk;
 pub mod plonk;
 pub mod shplonk;
 
