@@ -215,20 +215,24 @@ where
         // step of verification. This means we shall only load omages
         // omegas_inv for range (0..public_inputs.length). Implement this
         // optimization.
-        let pi_poly_xi = {
+        let pi_poly_eval_xi = {
             // (xi^n - 1) / n
             //
             // TODO: store `n.invert()` in `vk` to avoid
-            // havint to constrain it in every accumulation step.
+            // having to constrain it in every accumulation step.
             let numerator = z_h_eval_xi * n.invert();
 
+            // In case of no public inputs PI(x)
+            // can be reduced to
+            // PI(x) = (x^n - 1) / n
             if public_signals.len() == 0 {
                 numerator
             } else {
                 let denominator = {
                     let denoms = (0..public_signals.len())
                         .map(|index| {
-                            // (xi - omega^i) * omega^-1 => (omega^-1 * xi - 1)
+                            // (xi - omega^j) * omega^-j => (omega^-j * xi - 1)
+                            // for `j`th index.
                             let d = xi * vk_key.omegas_inv[index].unwrap();
                             let d = d - one;
                             d
@@ -236,6 +240,9 @@ where
                         .collect();
                     let denoms = loader.batch_invert(denoms);
 
+                    // Computes
+                    // `sum_of { pi_j * (xi * omega^-j - 1)^-1 }`
+                    // for j in range 0..public_signals.len()
                     let mut sum = denoms[0] * public_signals[0];
                     denoms
                         .iter()
@@ -250,6 +257,50 @@ where
                 numerator * denominator
             }
         };
+
+        // Compute [D]1
+        {
+            let ab = proof.eval_a * proof.eval_b;
+
+            let s2 = {
+                let a = proof.eval_a
+                    + (proof.challenges.beta * proof.challenges.xi)
+                    + proof.challenges.gamma;
+                let b = proof.eval_b
+                    + (proof.challenges.beta * vk_key.k1 * proof.challenges.xi)
+                    + proof.challenges.gamma;
+                let c = proof.eval_b
+                    + (proof.challenges.beta * vk_key.k2 * proof.challenges.xi)
+                    + proof.challenges.gamma;
+                let val = a * b * c * proof.challenges.alpha;
+                let val2 = l1_eval_xi * alpha.square() + proof.challenges.u;
+                val + val2
+            };
+
+            let s3 = {
+                let a =
+                    proof.eval_a + (proof.challenges.beta * proof.eval_s1) + proof.challenges.gamma;
+                let b =
+                    proof.eval_b + (proof.challenges.beta * proof.eval_s2) + proof.challenges.gamma;
+                a * b * proof.challenges.alpha * proof.eval_zw
+            };
+
+            let xi_power_2n = xi_power_n.square();
+
+            // perform msm
+            let part1 = vec![
+                (ab, vk_key.Qm),
+                (proof.eval_a, vk_key.Ql),
+                (proof.eval_b, vk_key.Qr),
+                (proof.eval_c, vk_key.Qo),
+                // [Qc] will be added later
+                (s2, proof.Z),
+            ];
+
+            let pairs2 = vec![
+
+            ]
+        }
 
         todo!()
     }
