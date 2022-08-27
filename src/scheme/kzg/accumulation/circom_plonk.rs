@@ -259,7 +259,7 @@ where
         };
 
         // Compute [D]1
-        {
+        let D = {
             let ab = proof.eval_a * proof.eval_b;
 
             let s2 = {
@@ -284,23 +284,32 @@ where
                     proof.eval_b + (proof.challenges.beta * proof.eval_s2) + proof.challenges.gamma;
                 a * b * proof.challenges.alpha * proof.eval_zw
             };
+            let s3 = s3.invert();
 
+            // perform msm for `t`s
             let xi_power_2n = xi_power_n.square();
+            let all_t = vec![
+                (one, proof.T1),
+                (xi_power_n, proof.T2),
+                (xi_power_2n, proof.T3),
+            ];
+            let all_t = L::LoadedEcPoint::multi_scalar_multiplication(all_t);
+            let z_h_eval_xi_inv = z_h_eval_xi.invert();
 
             // perform msm
-            let part1 = vec![
+            let pairs = vec![
                 (ab, vk_key.Qm),
                 (proof.eval_a, vk_key.Ql),
                 (proof.eval_b, vk_key.Qr),
                 (proof.eval_c, vk_key.Qo),
-                // [Qc] will be added later
+                (one, Qc),
                 (s2, proof.Z),
+                (s3, vk_key.S3),
+                (z_h_eval_xi_inv, all_t),
             ];
 
-            let pairs2 = vec![
-
-            ]
-        }
+            L::LoadedEcPoint::multi_scalar_multiplication(pairs)
+        };
 
         todo!()
     }
