@@ -16,8 +16,11 @@ use crate::{
 
 struct VerificationKey<C: Curve, L: Loader<C>> {
     // All Loaded values for the verification key.
-    // I think you can shit Domain here as well, but don't worry about it right now
-    domain: Domain<C>,
+    k: usize,
+    n: usize,
+    n_inv: L::LoadedScalar,
+    omega: C::Scalar,
+    omega_inv: C::Scalar,
     public_inputs_count: usize,
     k1: L::LoadedScalar,
     k2: L::LoadedScalar,
@@ -29,7 +32,6 @@ struct VerificationKey<C: Curve, L: Loader<C>> {
     S1: L::LoadedEcPoint,
     S2: L::LoadedEcPoint,
     S3: L::LoadedEcPoint,
-    X_2: L::LoadedEcPoint,
     // Contains omega^j `for j in range(0, public_inputs.length)`.
     // This is to avoid more constraints.
     omegas: Vec<L::LoadedScalar>,
@@ -72,33 +74,6 @@ pub struct CircomPlonkProof<C: Curve, L: Loader<C>> {
     eval_r: L::LoadedScalar,
     challenges: Challenges<C, L>,
 }
-
-pub struct Domain<C: Curve> {
-    k: usize,
-    n: usize,
-    omega: C::Scalar,
-    omega_inv: C::Scalar,
-}
-
-impl<C: Curve> Domain<C> {
-    pub fn new(k: u32) -> Self {
-        assert!(k < C::Scalar::S as usize);
-
-        let n = 1 << k;
-        let omega = C::Scalar::root_of_unity();
-
-        Self {
-            k,
-            n,
-            omega,
-            omega_inv: omega.invert(),
-        }
-    }
-}
-
-// 1. Aggregation challenge can be obtained from encoding proofs
-// 2. Simply use different powers of aggregation challenge `a`
-// 3. Note that in step 9 onwards, just accumulate the scalars but dont perform `Scalar multiplication`. Delay MSM till the end.
 
 impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
     fn read<T: TranscriptRead<C, L>>(
@@ -184,14 +159,14 @@ where
         strategy: &mut S,
     ) -> Result<S::Output, crate::Error> {
         // perform necessary checks
-        // 1. check that public signals are of correct length
+        assert_eq!(public_signals.len(), vk_key.public_inputs_count);
         // 2  check that omegas length in `vk` match public inputs length
 
         let proof = CircomPlonkProof::read(public_signals, transcript)?;
 
         // xi^n
         let xi = proof.challenges.xi;
-        let xi_power_n = xi.pow_constant(vk_key.domain.n);
+        let xi_power_n = xi.pow_constant(vk_key.n);
 
         // z_h(xi) = xi^n - 1;
         let one = loader.load_const(C::Scalar::one());
@@ -254,8 +229,7 @@ where
                         .skip(1)
                         .chain(public_signals.iter().skip(1))
                         .for_each(|d, pi| {
-                            let ith_val = d * pi;
-                            sum += ith_val;
+                            sum += d * pi;
                         });
                     sum
                 };
@@ -271,6 +245,7 @@ where
 
             let alpha = proof.challenges.alpha;
             let alpha_square = proof.challenges.alpha.square();
+
             let scalar_batch_poly_commit_identity = {
                 let a = proof.eval_a
                     + (proof.challenges.beta * proof.challenges.xi)
@@ -293,7 +268,7 @@ where
                     proof.eval_b + (proof.challenges.beta * proof.eval_s2) + proof.challenges.gamma;
                 a * b * alpha * proof.eval_zw
             };
-            let scalar_batch_poly_commit_permuted = scalar_batch_poly_commit_permuted.invert();
+            let neg_scalar_batch_poly_commit_permuted = scalar_batch_poly_commit_permuted.neg();
 
             // powers of `v`
             let v_powers: vec![L::LoadedScalar; 5] = (1..6)
@@ -317,55 +292,53 @@ where
 
                 pi_poly_eval_xi - l1_alpha_sq - pp
             };
-            let r0 = r0.invert();
+            let neg_r0 = r0.neg();
 
-            // `E` scalar
+            // -1`E` scalar
             let group_batch_eval_scalar = {
-                let mut sum = r0;
+                let mut sum = neg_r0;
                 sum = sum + (v[0] * proof.eval_a);
                 sum = sum + (v[1] * proof.eval_b);
                 sum = sum + (v[3] * proof.eval_c);
                 sum = sum + (v[4] * proof.eval_s1);
                 sum = sum + (v[5] * proof.eval_s2);
                 sum = sum + (proof.challenges.u * proof.eval_zw);
-                sum
+                sum.neg()
             };
 
-            // perform msm for `t`s
-            let xi_power_2n = xi_power_n.square();
-            let all_t = vec![
-                (one, proof.T1),
-                (xi_power_n, proof.T2),
-                (xi_power_2n, proof.T3),
-            ];
-            let all_t = L::LoadedEcPoint::multi_scalar_multiplication(all_t);
-            let z_h_eval_xi_inv = z_h_eval_xi.invert();
+            let neg_z_h_eval_xi = z_h_eval_xi.neg();
+            let neg_z_h_eval_xi_by_xi = neg_z_h_eval_xi * xi_power_n;
+            let neg_z_h_eval_xi_by_xi_2n = neg_z_h_eval_xi * xi_power_n.square();
 
-            let u_xi_omega = (proof.challenges.u * proof.challenges.xi) * vk_key.domain.omega;
+            let u_xi_omega = proof.challenges.u * proof.challenges.xi * vk_key.omega;
 
             // perform all msm
             // TODO: Fix the mess to use APIs properly
             vec![
                 // W
                 (proof.challenges.xi, proof.Wxi),
-                // Ww
+                // + Ww
                 (u_xi_omega, proof.Wxiw),
-                // F
+                // + F
+                // D
                 (ab, vk_key.Qm),
                 (proof.eval_a, vk_key.Ql),
                 (proof.eval_b, vk_key.Qr),
                 (proof.eval_c, vk_key.Qo),
                 (one, Qc),
-                (s2, proof.Z),
-                (s3, vk_key.S3),
-                (z_h_eval_xi_inv, all_t),
+                (scalar_batch_poly_commit_identity, proof.Z),
+                (scalar_batch_poly_commit_permuted, vk_key.S3),
+                (neg_z_h_eval_xi, proof.T1),
+                (neg_z_h_eval_xi_by_xi, proof.T2),
+                (neg_z_h_eval_xi_by_xi_2n, proof.T3),
+                // gates + permutation
                 (v_powers[0], proof.A),
                 (v_powers[1], proof.B),
                 (v_powers[2], proof.C),
                 (v_powers[3], vk_key.S1),
                 (v_powers[4], vk_key.S2),
                 // - E
-                // (group_batch_eval_scalar,)
+                (one.neg(), loader.ec_point_load_one()),
             ]
             .iter()
             .map(|pair| MSM::base(pair.1) * pair.0)
