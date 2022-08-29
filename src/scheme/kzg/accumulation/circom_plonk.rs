@@ -7,7 +7,10 @@ use itertools::Itertools;
 
 use crate::{
     loader::{LoadedScalar, Loader},
-    scheme::kzg::accumulation::{AccumulationScheme, AccumulationStrategy, Accumulator},
+    scheme::kzg::{
+        accumulation::{AccumulationScheme, AccumulationStrategy, Accumulator},
+        MSM,
+    },
     util::TranscriptRead,
 };
 
@@ -324,7 +327,7 @@ where
                 sum = sum + (v[3] * proof.eval_c);
                 sum = sum + (v[4] * proof.eval_s1);
                 sum = sum + (v[5] * proof.eval_s2);
-                sum = sum + (proof.challenges.u * proof.eval_zw)
+                sum = sum + (proof.challenges.u * proof.eval_zw);
                 sum
             };
 
@@ -341,7 +344,8 @@ where
             let u_xi_omega = (proof.challenges.u * proof.challenges.xi) * vk_key.domain.omega;
 
             // perform all msm
-            let rhs_pairs = vec![
+            // TODO: Fix the mess to use APIs properly
+            vec![
                 // W
                 (proof.challenges.xi, proof.Wxi),
                 // Ww
@@ -362,18 +366,23 @@ where
                 (v_powers[4], vk_key.S2),
                 // - E
                 // (group_batch_eval_scalar,)
-            ];
-
-            L::LoadedEcPoint::multi_scalar_multiplication(pairs)
+            ]
+            .iter()
+            .map(|pair| MSM::base(pair.1) * pair.0)
+            .collect()
+            .sum()
         };
 
         // Compute pairing lhs
+        let lhs = {
+            vec![(one, proof.Wxi), (proof.challenges.u, proof.Wxiw)]
+                .iter()
+                .map(|pair| MSM::base(pair.1) * pair.0)
+                .collect()
+                .sum()
+        };
 
-        // Calculate rest
-        // and then accumulate.
-        // For accumulation simply sqeeuze the transcript another time to
-        // obtain the challenge.
-
-        todo!()
+        let accumulator = Accumulator::new(lhs, rhs);
+        strategy.process(loader, transcript, proof, accumulator)
     }
 }
