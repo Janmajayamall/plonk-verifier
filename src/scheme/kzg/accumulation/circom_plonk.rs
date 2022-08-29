@@ -2,6 +2,8 @@ use core::num;
 use std::vec;
 
 use group::Curve;
+use halo2_curves::pasta::pallas::Scalar;
+use itertools::Itertools;
 
 use crate::{
     loader::{LoadedScalar, Loader},
@@ -258,11 +260,15 @@ where
             }
         };
 
-        // Compute [D]1
-        let D = {
+        // Compute pairing rhs
+        let rhs = {
+            // We first calculate all scalars and delay MSM
+            // till end
             let ab = proof.eval_a * proof.eval_b;
 
-            let s2 = {
+            let alpha = proof.challenges.alpha;
+            let alpha_square = proof.challenges.alpha.square();
+            let scalar_batch_poly_commit_identity = {
                 let a = proof.eval_a
                     + (proof.challenges.beta * proof.challenges.xi)
                     + proof.challenges.gamma;
@@ -272,19 +278,55 @@ where
                 let c = proof.eval_b
                     + (proof.challenges.beta * vk_key.k2 * proof.challenges.xi)
                     + proof.challenges.gamma;
-                let val = a * b * c * proof.challenges.alpha;
-                let val2 = l1_eval_xi * alpha.square() + proof.challenges.u;
+                let val = a * b * c * alpha;
+                let val2 = l1_eval_xi * alpha_square + proof.challenges.u;
                 val + val2
             };
 
-            let s3 = {
+            let scalar_batch_poly_commit_permuted = {
                 let a =
                     proof.eval_a + (proof.challenges.beta * proof.eval_s1) + proof.challenges.gamma;
                 let b =
                     proof.eval_b + (proof.challenges.beta * proof.eval_s2) + proof.challenges.gamma;
-                a * b * proof.challenges.alpha * proof.eval_zw
+                a * b * alpha * proof.eval_zw
             };
-            let s3 = s3.invert();
+            let scalar_batch_poly_commit_permuted = scalar_batch_poly_commit_permuted.invert();
+
+            // powers of `v`
+            let v_powers: vec![L::LoadedScalar; 5] = (1..6)
+                .fold(proof.challenges.v, |acc, i| {
+                    if i > 1 {
+                        acc * proof.challenges.v
+                    }
+                })
+                .into();
+
+            let r0 = {
+                let l1_alpha_sq = l1_eval_xi * alpha_square;
+
+                // permutation product
+                let p1 =
+                    proof.eval_a + (proof.challenges.beta * proof.eval_s1) + proof.challenges.gamma;
+                let p2 =
+                    proof.eval_b + (proof.challenges.beta * proof.eval_s2) + proof.challenges.gamma;
+                let p3 = (proof.eval_c + proof.challenges.gamma) * proof.eval_zw;
+                let pp = p1 * p2 * p3 * alpha;
+
+                pi_poly_eval_xi - l1_alpha_sq - pp
+            };
+            let r0 = r0.invert();
+
+            // `E` scalar
+            let group_batch_eval_scalar = {
+                let mut sum = r0;
+                sum = sum + (v[0] * proof.eval_a);
+                sum = sum + (v[1] * proof.eval_b);
+                sum = sum + (v[3] * proof.eval_c);
+                sum = sum + (v[4] * proof.eval_s1);
+                sum = sum + (v[5] * proof.eval_s2);
+                sum = sum + (proof.challenges.u * proof.eval_zw)
+                sum
+            };
 
             // perform msm for `t`s
             let xi_power_2n = xi_power_n.square();
@@ -296,8 +338,15 @@ where
             let all_t = L::LoadedEcPoint::multi_scalar_multiplication(all_t);
             let z_h_eval_xi_inv = z_h_eval_xi.invert();
 
-            // perform msm
-            let pairs = vec![
+            let u_xi_omega = (proof.challenges.u * proof.challenges.xi) * vk_key.domain.omega;
+
+            // perform all msm
+            let rhs_pairs = vec![
+                // W
+                (proof.challenges.xi, proof.Wxi),
+                // Ww
+                (u_xi_omega, proof.Wxiw),
+                // F
                 (ab, vk_key.Qm),
                 (proof.eval_a, vk_key.Ql),
                 (proof.eval_b, vk_key.Qr),
@@ -306,10 +355,24 @@ where
                 (s2, proof.Z),
                 (s3, vk_key.S3),
                 (z_h_eval_xi_inv, all_t),
+                (v_powers[0], proof.A),
+                (v_powers[1], proof.B),
+                (v_powers[2], proof.C),
+                (v_powers[3], vk_key.S1),
+                (v_powers[4], vk_key.S2),
+                // - E
+                // (group_batch_eval_scalar,)
             ];
 
             L::LoadedEcPoint::multi_scalar_multiplication(pairs)
         };
+
+        // Compute pairing lhs
+
+        // Calculate rest
+        // and then accumulate.
+        // For accumulation simply sqeeuze the transcript another time to
+        // obtain the challenge.
 
         todo!()
     }
