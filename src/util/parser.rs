@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 pub trait Parser {}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct VerificationKey {
     protocol: String,
     curve: String,
@@ -22,35 +22,36 @@ struct VerificationKey {
     // public_inputs_count: usize,
     // k1: L::LoadedScalar,
     // k2: L::LoadedScalar,
-    Qm: Vec<BigUint>, // Ql: L::LoadedEcPoint,
-                      // Qr: L::LoadedEcPoint,
-                      // Qo: L::LoadedEcPoint,
-                      // Qc: L::LoadedEcPoint,
-                      // S1: L::LoadedEcPoint,
-                      // S2: L::LoadedEcPoint,
-                      // S3: L::LoadedEcPoint,
+    Qm: String, // Ql: L::LoadedEcPoint,
+                // Qr: L::LoadedEcPoint,
+                // Qo: L::LoadedEcPoint,
+                // Qc: L::LoadedEcPoint,
+                // S1: L::LoadedEcPoint,
+                // S2: L::LoadedEcPoint,
+                // S3: L::LoadedEcPoint,
 }
 
 struct CircomParser {}
 
 impl CircomParser {
-    pub fn read_vk_file() -> Result<VerificationKey> {
-        let file = File::open(format!("{}/verification_key.json", env::current_dir()))
-            .expect("Failed to open verification file");
+    pub fn read_vk_file() -> VerificationKey {
+        let file = File::open(format!(
+            "{}/verification_key.json",
+            env::current_dir().unwrap().to_str().unwrap()
+        ))
+        .expect("Failed to open verification file");
         let reader = BufReader::new(file);
-        serde_json::from_reader(reader)
+        serde_json::from_reader(reader).unwrap()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use core::num::dec2flt::parse;
-
     use super::CircomParser;
 
     #[test]
     fn test() {
-        let parser = CircomParser::read_vk_file().expect("Parser failed");
+        let parser = CircomParser::read_vk_file();
         println!("{:#?} parse vk", parser);
     }
 }
