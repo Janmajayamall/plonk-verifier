@@ -28,7 +28,7 @@ poseidon = { git = "https://github.com/privacy-scaling-explorations/poseidon", b
 
 # evm
 ethereum_types = { package = "ethereum-types", version = "0.13.1", default-features = false, features = ["std"], optional = true }
-foundry_evm = { git = "https://github.com/foundry-rs/foundry", package = "foundry-evm", optional = true }
+foundry_evm = { git = "https://github.com/foundry-rs/foundry", package = "foundry-evm", rev = "93ee742d", optional = true }
 crossterm = { version = "0.22.1", optional = true }
 tui = { version = "0.16.0", default-features = false, features = ["crossterm"], optional = true }
 sha3 = { version = "0.10.1", optional = true }
@@ -46,13 +46,12 @@ sanity-check = []
 
 [patch.crates-io]
 halo2_proofs = { git = "https://github.com/han0110/halo2", branch = "experiment", package = "halo2_proofs" }
-revm = { git = "https://github.com/bluealloy/revm", package = "revm"  }
 
 [patch."https://github.com/privacy-scaling-explorations/halo2"]
 halo2_proofs = { git = "https://github.com/han0110/halo2", branch = "experiment", package = "halo2_proofs" }
 
 [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
-halo2_curves = { git = "https://github.com/han0110/halo2curves", branch = "fix/impl-fq2-to-repr", package = "halo2curves" }
+halo2_curves = { git = "https://github.com//privacy-scaling-explorations/halo2curves", tag = "0.2.1", package = "halo2curves" }
 
 [patch."https://github.com/privacy-scaling-explorations/halo2wrong"]
 halo2_wrong = { git = "https://github.com/han0110/halo2wrong", branch = "feature/range-chip-with-tagged-table", package = "halo2wrong" }
