@@ -1,5 +1,6 @@
 mod arithmetic;
 mod expression;
+mod parser;
 mod transcript;
 
 pub use arithmetic::{
