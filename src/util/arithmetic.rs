@@ -128,6 +128,7 @@ impl<F: PrimeField> Domain<F> {
             .take(F::S as usize - k + 1)
             .last()
             .unwrap();
+        debug_assert_eq!(gen.pow_vartime([n as u64]), F::one());
         let gen_inv = gen.invert().unwrap();
 
         Self {

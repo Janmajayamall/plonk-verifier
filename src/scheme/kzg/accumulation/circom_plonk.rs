@@ -1,5 +1,8 @@
 use crate::{
-    loader::{LoadedScalar, Loader},
+    loader::{
+        halo2::{Halo2Loader, PoseidonTranscript},
+        LoadedScalar, Loader,
+    },
     scheme::kzg::{
         accumulation::{AccumulationStrategy, Accumulator},
         MSM,
@@ -7,11 +10,38 @@ use crate::{
     util::{Domain, TranscriptRead},
     Error,
 };
+use ff::PrimeField;
 use group::Curve;
+use halo2_curves::{
+    bn256::{Fq, Fr, G1Affine, G1},
+    FieldExt,
+};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::BufReader;
+use std::marker::PhantomData;
 use std::ops::Neg;
-use std::{marker::PhantomData, vec};
 
-struct Protocol<C: Curve> {
+#[derive(Serialize, Deserialize, Debug)]
+// #[serde(rename_all = "camelCase")]
+struct VerificationKeyUnInit {
+    protocol: String,
+    curve: String,
+    nPublic: usize,
+    power: usize,
+    k1: String,
+    k2: String,
+    Qm: Vec<String>,
+    Ql: Vec<String>,
+    Qr: Vec<String>,
+    Qo: Vec<String>,
+    Qc: Vec<String>,
+    S1: Vec<String>,
+    S2: Vec<String>,
+    S3: Vec<String>,
+}
+
+pub struct Protocol<C: Curve> {
     domain: Domain<C::Scalar>,
     public_inputs_count: usize,
     k1: C::Scalar,
@@ -24,6 +54,40 @@ struct Protocol<C: Curve> {
     S1: C,
     S2: C,
     S3: C,
+}
+
+pub fn str_to_g1(x: &str, y: &str, z: &str) -> G1 {
+    let x = Fq::from_str_vartime(x).unwrap();
+    let y = Fq::from_str_vartime(y).unwrap();
+    let z = Fq::from_str_vartime(z).unwrap();
+    G1 { x, y, z }
+}
+
+impl<C: Curve> Protocol<C> {
+    pub fn read<B: PrimeField>(path: &str) {
+        let file = File::open(path).unwrap();
+        let reader = BufReader::new(file);
+        let vk_unint: VerificationKeyUnInit = serde_json::from_reader(reader).unwrap();
+
+        let k1 = C::Scalar::from_str_vartime(vk_unint.k1.as_str()).unwrap();
+        let fw = B::from_str_vartime(vk_unint.Qc[0].as_str()).unwrap();
+        let Qm: C = str_to_g1(
+            vk_unint.Qc[0].as_str(),
+            vk_unint.Qc[1].as_str(),
+            vk_unint.Qc[2].as_str(),
+        );
+
+        // load group
+
+        println!("{:#?}", Qm);
+
+        // let p = Self {
+        //     domain: Domain::new(vk_unint.power),
+        //     public_inputs_count: vk_unint.nPublic,
+        //     k1: C::Scalar::from_str_vartime(vk_unint.k1.as_str()).unwrap(),
+        //     k2: C::Scalar::from_str_vartime(vk_unint.k1.as_str()).unwrap(),
+        // };
+    }
 }
 
 pub struct Challenges<C: Curve, L: Loader<C>> {
@@ -70,7 +134,7 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
 
         let beta = transcript.squeeze_challenge();
 
-        transcript.common_scalar(&beta);
+        transcript.common_scalar(&beta)?;
         let gamma = transcript.squeeze_challenge();
 
         let Z = transcript.read_ec_point()?;
@@ -336,5 +400,18 @@ where
 
         let accumulator = Accumulator::new(lhs, rhs);
         strategy.process(loader, transcript, proof, accumulator)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read() {
+        let cwd = std::env::current_dir().unwrap();
+        let cwd = cwd.to_str().unwrap();
+        let f =
+            Protocol::<G1>::read::<Fq>(format!("{}/target/verification_key.json", cwd).as_str());
     }
 }

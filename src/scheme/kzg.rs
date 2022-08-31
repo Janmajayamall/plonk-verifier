@@ -8,8 +8,10 @@ mod cost;
 mod msm;
 
 pub use accumulation::{
-    plonk::PlonkAccumulationScheme, shplonk::ShplonkAccumulationScheme, AccumulationScheme,
-    AccumulationStrategy, Accumulator, SameCurveAccumulation,
+    circom_plonk::{CircomPlonkAccumulationScheme, CircomPlonkProof, Protocol as CircomProtocol},
+    plonk::PlonkAccumulationScheme,
+    shplonk::ShplonkAccumulationScheme,
+    AccumulationScheme, AccumulationStrategy, Accumulator, SameCurveAccumulation,
 };
 pub use cost::{Cost, CostEstimation};
 pub use msm::MSM;
