@@ -17,86 +17,32 @@ use halo2_curves::{
     FieldExt,
 };
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::BufReader;
+
 use std::marker::PhantomData;
 use std::ops::Neg;
 
-#[derive(Serialize, Deserialize, Debug)]
-// #[serde(rename_all = "camelCase")]
-struct VerificationKeyUnInit {
-    protocol: String,
-    curve: String,
-    nPublic: usize,
-    power: usize,
-    k1: String,
-    k2: String,
-    Qm: Vec<String>,
-    Ql: Vec<String>,
-    Qr: Vec<String>,
-    Qo: Vec<String>,
-    Qc: Vec<String>,
-    S1: Vec<String>,
-    S2: Vec<String>,
-    S3: Vec<String>,
-}
-
 pub struct Protocol<C: Curve> {
-    domain: Domain<C::Scalar>,
-    public_inputs_count: usize,
-    k1: C::Scalar,
-    k2: C::Scalar,
-    Qm: C,
-    Ql: C,
-    Qr: C,
-    Qo: C,
-    Qc: C,
-    S1: C,
-    S2: C,
-    S3: C,
-}
-
-pub fn str_to_g1(x: &str, y: &str, z: &str) -> G1 {
-    let x = Fq::from_str_vartime(x).unwrap();
-    let y = Fq::from_str_vartime(y).unwrap();
-    let z = Fq::from_str_vartime(z).unwrap();
-    G1 { x, y, z }
-}
-
-impl<C: Curve> Protocol<C> {
-    pub fn read<B: PrimeField>(path: &str) {
-        let file = File::open(path).unwrap();
-        let reader = BufReader::new(file);
-        let vk_unint: VerificationKeyUnInit = serde_json::from_reader(reader).unwrap();
-
-        let k1 = C::Scalar::from_str_vartime(vk_unint.k1.as_str()).unwrap();
-        let fw = B::from_str_vartime(vk_unint.Qc[0].as_str()).unwrap();
-        let Qm: C = str_to_g1(
-            vk_unint.Qc[0].as_str(),
-            vk_unint.Qc[1].as_str(),
-            vk_unint.Qc[2].as_str(),
-        );
-
-        // load group
-
-        println!("{:#?}", Qm);
-
-        // let p = Self {
-        //     domain: Domain::new(vk_unint.power),
-        //     public_inputs_count: vk_unint.nPublic,
-        //     k1: C::Scalar::from_str_vartime(vk_unint.k1.as_str()).unwrap(),
-        //     k2: C::Scalar::from_str_vartime(vk_unint.k1.as_str()).unwrap(),
-        // };
-    }
+    pub domain: Domain<C::Scalar>,
+    pub public_inputs_count: usize,
+    pub k1: C::Scalar,
+    pub k2: C::Scalar,
+    pub Qm: C,
+    pub Ql: C,
+    pub Qr: C,
+    pub Qo: C,
+    pub Qc: C,
+    pub S1: C,
+    pub S2: C,
+    pub S3: C,
 }
 
 pub struct Challenges<C: Curve, L: Loader<C>> {
-    beta: L::LoadedScalar,
-    alpha: L::LoadedScalar,
-    gamma: L::LoadedScalar,
-    xi: L::LoadedScalar,
-    v: L::LoadedScalar,
-    u: L::LoadedScalar,
+    pub beta: L::LoadedScalar,
+    pub alpha: L::LoadedScalar,
+    pub gamma: L::LoadedScalar,
+    pub xi: L::LoadedScalar,
+    pub v: L::LoadedScalar,
+    pub u: L::LoadedScalar,
 }
 
 pub struct CircomPlonkProof<C: Curve, L: Loader<C>> {
@@ -406,12 +352,4 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn read() {
-        let cwd = std::env::current_dir().unwrap();
-        let cwd = cwd.to_str().unwrap();
-        let f =
-            Protocol::<G1>::read::<Fq>(format!("{}/target/verification_key.json", cwd).as_str());
-    }
 }
