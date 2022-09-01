@@ -33,6 +33,7 @@ pub fn json_to_proof_instance(json: &Value) -> Vec<u8> {
     std::iter::empty()
         .chain(json_to_bn256_g1(json, "A").to_bytes().as_ref().to_vec())
         .chain(json_to_bn256_g1(json, "B").to_bytes().as_ref().to_vec())
+        .chain(json_to_bn256_g1(json, "C").to_bytes().as_ref().to_vec())
         .chain(json_to_bn256_g1(json, "Z").to_bytes().as_ref().to_vec())
         .chain(json_to_bn256_g1(json, "T1").to_bytes().as_ref().to_vec())
         .chain(json_to_bn256_g1(json, "T2").to_bytes().as_ref().to_vec())

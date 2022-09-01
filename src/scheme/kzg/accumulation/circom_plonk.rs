@@ -16,7 +16,6 @@ use halo2_curves::{
     bn256::{Fq, Fr, G1Affine, G1},
     FieldExt,
 };
-use serde::{Deserialize, Serialize};
 
 use std::marker::PhantomData;
 use std::ops::Neg;
@@ -76,8 +75,11 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         });
 
         let A = transcript.read_ec_point()?;
+        // println!("Just read A: {:#?}", A);
         let B = transcript.read_ec_point()?;
+        // println!("Just read B: {:#?}", B);
         let C = transcript.read_ec_point()?;
+        // println!("Just read C: {:#?}", C);
 
         let beta = transcript.squeeze_challenge();
 
@@ -85,11 +87,15 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         let gamma = transcript.squeeze_challenge();
 
         let Z = transcript.read_ec_point()?;
+        // println!("Just read Z: {:#?}", Z);
         let alpha = transcript.squeeze_challenge();
 
         let T1 = transcript.read_ec_point()?;
+        // println!("Just read T1: {:#?}", T1);
         let T2 = transcript.read_ec_point()?;
+        // println!("Just read T2: {:#?}", T2);
         let T3 = transcript.read_ec_point()?;
+        // println!("Just read T3: {:#?}", T3);
         let xi = transcript.squeeze_challenge();
 
         let eval_points = transcript.read_n_scalars(7)?;
@@ -102,9 +108,10 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         // let eval_r = eval_points[6];
 
         let v = transcript.squeeze_challenge();
-
-        let Wxi = transcript.read_ec_point()?;
+        let Wxi: L::LoadedEcPoint = transcript.read_ec_point()?;
+        // println!("Just read WXI: {:#?}", Wxi);
         let Wxiw = transcript.read_ec_point()?;
+        // println!("Just read WXIW: {:#?}", Wxiw);
         let u = transcript.squeeze_challenge();
 
         Ok(Self {
@@ -158,6 +165,7 @@ where
         transcript: &mut T,
         strategy: &mut S,
     ) -> Result<S::Output, crate::Error> {
+        println!("Starting accumulation");
         // perform necessary checks
         assert_eq!(public_signals.len(), protocol.public_inputs_count);
 
@@ -346,6 +354,7 @@ where
         lhs.push(proof.challenges.u.clone(), proof.Wxiw.clone());
 
         let accumulator = Accumulator::new(lhs, rhs);
+        println!("Ending accumulation");
         strategy.process(loader, transcript, proof, accumulator)
     }
 }

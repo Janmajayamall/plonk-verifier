@@ -181,6 +181,7 @@ impl<
                 .map(circuit::Value::known)
                 .unwrap_or_else(circuit::Value::unknown)
         });
+
         let ec_point = self.loader.assign_ec_point(ec_point);
         self.common_ec_point(&ec_point)?;
         Ok(ec_point)

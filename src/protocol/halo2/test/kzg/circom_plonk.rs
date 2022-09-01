@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, vec};
 
 use group::Curve;
 use halo2_curves::bn256::{Fr, G1Affine, G1};
@@ -19,10 +19,10 @@ use halo2_proofs::{
     plonk::{self, Circuit},
 };
 
-const T: usize = 5;
-const RATE: usize = 4;
+const T: usize = 17;
+const RATE: usize = 16;
 const R_F: usize = 8;
-const R_P: usize = 57;
+const R_P: usize = 10;
 
 type Halo2Loader<'a, 'b, C> = halo2::Halo2Loader<'a, 'b, C, LIMBS, BITS>;
 type SameCurveAccumulation<C, L> = kzg::SameCurveAccumulation<C, L, LIMBS, BITS>;
@@ -34,6 +34,16 @@ pub struct SnarkWitness<C: Curve> {
     protocol: kzg::CircomProtocol<C>,
     proof: Value<Vec<u8>>,
     public_signals: Vec<Value<C::Scalar>>,
+}
+
+impl<C: Curve> SnarkWitness<C> {
+    pub fn without_witnesses(&self) -> Self {
+        Self {
+            protocol: self.protocol.clone(),
+            proof: Value::unknown(),
+            public_signals: vec![Value::unknown(); self.public_signals.len()],
+        }
+    }
 }
 
 fn accumulate<'a, 'b>(
@@ -64,7 +74,7 @@ fn accumulate<'a, 'b>(
 }
 
 struct Accumulation {
-    // g1: G1Affine,
+    g1: G1Affine,
     snarks: Vec<SnarkWitness<G1>>,
 }
 
@@ -75,7 +85,14 @@ impl Circuit<Fr> for Accumulation {
     type FloorPlanner = V1;
 
     fn without_witnesses(&self) -> Self {
-        todo!()
+        Self {
+            g1: self.g1,
+            snarks: self
+                .snarks
+                .iter()
+                .map(SnarkWitness::without_witnesses)
+                .collect(),
+        }
     }
 
     fn configure(meta: &mut plonk::ConstraintSystem<Fr>) -> Self::Config {
@@ -92,8 +109,8 @@ impl Circuit<Fr> for Accumulation {
         mut layouter: impl Layouter<Fr>,
     ) -> Result<(), plonk::Error> {
         config.load_table(&mut layouter)?;
-
-        layouter.assign_region(
+        println!("snrks {}", self.snarks.len());
+        let (lhs, rhs) = layouter.assign_region(
             || "",
             |mut region| {
                 let mut offset = 0;
@@ -104,18 +121,18 @@ impl Circuit<Fr> for Accumulation {
                 for snark in self.snarks.iter() {
                     accumulate(&loader, &mut strategy, snark)?;
                 }
-                // let (lhs, rhs) = strategy.finalize(self.g1);
+                let (lhs, rhs) = strategy.finalize(self.g1);
 
                 loader.print_row_metering();
                 println!("Total: {}", offset);
-                Ok(())
-                // Ok((lhs, rhs))
+
+                Ok((lhs, rhs))
             },
         )?;
 
-        // let ecc_chip = BaseFieldEccChip::<G1Affine>::new(config.ecc_config());
-        // ecc_chip.expose_public(layouter.namespace(|| ""), lhs, 0)?;
-        // ecc_chip.expose_public(layouter.namespace(|| ""), rhs, 2 * LIMBS)?;
+        let ecc_chip = BaseFieldEccChip::<G1Affine>::new(config.ecc_config());
+        ecc_chip.expose_public(layouter.namespace(|| ""), lhs, 0)?;
+        ecc_chip.expose_public(layouter.namespace(|| ""), rhs, 2 * LIMBS)?;
 
         Ok(())
     }
@@ -128,7 +145,7 @@ mod tests {
     use halo2_proofs::dev::MockProver;
 
     #[test]
-    fn test_accumulation() {
+    fn circom_accumulation() {
         let protocol = read_protocol("./test-files/verification_key.json");
         let snarks: Vec<SnarkWitness<G1>> =
             read_proof_instances(vec!["./test-files/proof.json".to_string()])
@@ -143,12 +160,20 @@ mod tests {
                 })
                 .collect();
 
-        let circuit = Accumulation { snarks };
-        let k = 10;
+        let circuit = Accumulation {
+            g1: G1Affine::generator(),
+            snarks,
+        };
+        let k = 20;
 
         const ZK: bool = true;
-        MockProver::run::<_, ZK>(k, &circuit, Vec::new())
+        let instances = vec![vec![]];
+        MockProver::run::<_, ZK>(k, &circuit, instances)
             .unwrap()
             .assert_satisfied();
+
+        // TODO:
+        // (1) halo2_kzg_create_snark to create snark proof
+        // (2) halo2_kzg_native_verify to verify the snakr proof and accumulation pairing
     }
 }
