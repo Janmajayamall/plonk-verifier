@@ -10,6 +10,7 @@ use halo2_proofs::poly::{
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use std::{fmt::Debug, fs};
 
+mod circom_plonk;
 mod halo2;
 mod native;
 

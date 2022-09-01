@@ -150,7 +150,7 @@ where
     T: TranscriptRead<C, L>,
     S: AccumulationStrategy<C, L, T, CircomPlonkProof<C, L>>,
 {
-    fn accumulate(
+    pub fn accumulate(
         protocol: &Protocol<C>,
         loader: &L,
         public_signals: &Vec<L::LoadedScalar>,
