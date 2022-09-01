@@ -9,6 +9,7 @@ pub use arithmetic::{
     Rotation, UncompressedEncoding,
 };
 pub use expression::{CommonPolynomial, CommonPolynomialEvaluation, Expression, Query};
+pub use parser::{read_proof_instances, read_protocol, read_public_signals};
 pub use transcript::{Transcript, TranscriptRead};
 
 pub use itertools::{EitherOrBoth, Itertools};

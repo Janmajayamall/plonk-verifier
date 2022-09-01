@@ -1,29 +1,11 @@
 use crate::{scheme::kzg::CircomProtocol, util::GroupEncoding};
 use ff::PrimeField;
 use halo2_curves::bn256::{Fq, Fr, G1};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::Domain;
-
-#[derive(Serialize, Deserialize, Debug)]
-// #[serde(rename_all = "camelCase")]
-pub struct CircomVerificationKeyUninitialized {
-    protocol: String,
-    curve: String,
-    nPublic: usize,
-    power: usize,
-    k1: String,
-    k2: String,
-    Qm: Vec<String>,
-    Ql: Vec<String>,
-    Qr: Vec<String>,
-    Qo: Vec<String>,
-    Qc: Vec<String>,
-    S1: Vec<String>,
-    S2: Vec<String>,
-    S3: Vec<String>,
-}
 
 pub fn json_to_bn256_g1(json: &Value, key: &str) -> G1 {
     let coords: Vec<String> = json
@@ -94,6 +76,23 @@ pub fn read_proof_instances(paths: Vec<String>) -> Vec<Vec<u8>> {
             let json = std::fs::read_to_string(path.as_str()).unwrap();
             let json: Value = serde_json::from_str(&json).unwrap();
             json_to_proof_instance(&json)
+        })
+        .collect()
+}
+
+pub fn read_public_signals(paths: Vec<String>) -> Vec<Vec<Fr>> {
+    paths
+        .iter()
+        .map(|path| {
+            let json = std::fs::read_to_string(path.as_str()).unwrap();
+            let json: Value = serde_json::from_str(&json).unwrap();
+            json.as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i.as_str().unwrap())
+                .into_iter()
+                .map(|i| Fr::from_str_vartime(i).unwrap())
+                .collect_vec()
         })
         .collect()
 }

@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::Neg;
 
+#[derive(Clone)]
 pub struct Protocol<C: Curve> {
     pub domain: Domain<C::Scalar>,
     pub public_inputs_count: usize,

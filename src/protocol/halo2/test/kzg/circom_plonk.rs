@@ -7,10 +7,7 @@ use halo2_wrong_transcript::NativeRepresentation;
 use itertools::Itertools;
 
 use crate::{
-    loader::{
-        halo2::{self},
-        ScalarLoader,
-    },
+    loader::halo2::{self},
     protocol::halo2::test::{
         kzg::{BITS, LIMBS},
         MainGateWithRangeConfig,
@@ -67,7 +64,7 @@ fn accumulate<'a, 'b>(
 }
 
 struct Accumulation {
-    g1: G1Affine,
+    // g1: G1Affine,
     snarks: Vec<SnarkWitness<G1>>,
 }
 
@@ -96,7 +93,7 @@ impl Circuit<Fr> for Accumulation {
     ) -> Result<(), plonk::Error> {
         config.load_table(&mut layouter)?;
 
-        let (lhs, rhs) = layouter.assign_region(
+        layouter.assign_region(
             || "",
             |mut region| {
                 let mut offset = 0;
@@ -107,19 +104,51 @@ impl Circuit<Fr> for Accumulation {
                 for snark in self.snarks.iter() {
                     accumulate(&loader, &mut strategy, snark)?;
                 }
-                let (lhs, rhs) = strategy.finalize(self.g1);
+                // let (lhs, rhs) = strategy.finalize(self.g1);
 
                 loader.print_row_metering();
                 println!("Total: {}", offset);
-
-                Ok((lhs, rhs))
+                Ok(())
+                // Ok((lhs, rhs))
             },
         )?;
 
-        let ecc_chip = BaseFieldEccChip::<G1Affine>::new(config.ecc_config());
-        ecc_chip.expose_public(layouter.namespace(|| ""), lhs, 0)?;
-        ecc_chip.expose_public(layouter.namespace(|| ""), rhs, 2 * LIMBS)?;
+        // let ecc_chip = BaseFieldEccChip::<G1Affine>::new(config.ecc_config());
+        // ecc_chip.expose_public(layouter.namespace(|| ""), lhs, 0)?;
+        // ecc_chip.expose_public(layouter.namespace(|| ""), rhs, 2 * LIMBS)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::{read_proof_instances, read_protocol, read_public_signals};
+    use halo2_proofs::dev::MockProver;
+
+    #[test]
+    fn test_accumulation() {
+        let protocol = read_protocol("./test-files/verification_key.json");
+        let snarks: Vec<SnarkWitness<G1>> =
+            read_proof_instances(vec!["./test-files/proof.json".to_string()])
+                .iter()
+                .zip(read_public_signals(vec![
+                    "./test-files/public.json".to_string()
+                ]))
+                .map(|(proof, public)| SnarkWitness {
+                    protocol: protocol.clone(),
+                    proof: Value::known(proof.clone()),
+                    public_signals: public.iter().map(|v| Value::known(*v)).collect(),
+                })
+                .collect();
+
+        let circuit = Accumulation { snarks };
+        let k = 10;
+
+        const ZK: bool = true;
+        MockProver::run::<_, ZK>(k, &circuit, Vec::new())
+            .unwrap()
+            .assert_satisfied();
     }
 }
