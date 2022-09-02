@@ -145,10 +145,7 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
 
 #[derive(Default)]
 pub struct CircomPlonkAccumulationScheme<C, L, T, S> {
-    _marker_c: PhantomData<C>,
-    _marker_l: PhantomData<L>,
-    _marker_t: PhantomData<T>,
-    _marker_s: PhantomData<S>,
+    _marker: PhantomData<(C, L, T, S)>,
 }
 
 impl<C, L, T, S> CircomPlonkAccumulationScheme<C, L, T, S>
@@ -165,7 +162,6 @@ where
         transcript: &mut T,
         strategy: &mut S,
     ) -> Result<S::Output, crate::Error> {
-        println!("Starting accumulation");
         // perform necessary checks
         assert_eq!(public_signals.len(), protocol.public_inputs_count);
 
@@ -353,8 +349,7 @@ where
         lhs.push(one.clone(), proof.Wxi.clone());
         lhs.push(proof.challenges.u.clone(), proof.Wxiw.clone());
 
-        let accumulator = Accumulator::new(lhs, rhs);
-        println!("Ending accumulation");
+        let accumulator = Accumulator::new(rhs, lhs);
         strategy.process(loader, transcript, proof, accumulator)
     }
 }
