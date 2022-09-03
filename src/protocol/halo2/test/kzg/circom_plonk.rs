@@ -10,7 +10,6 @@ use crate::{
 };
 use group::Curve;
 use halo2_curves::bn256::{Fr, G1Affine, G1};
-use halo2_proofs::plonk::keygen_pk;
 use halo2_proofs::{
     circuit::{floor_planner::V1, Layouter, Value},
     plonk::{self, Circuit},
@@ -143,49 +142,34 @@ impl Circuit<Fr> for Accumulation {
 mod tests {
     use super::*;
     use crate::{
-        loader::{
-            native::{self, NativeLoader},
-            ScalarLoader,
-        },
+        loader::{native::NativeLoader, ScalarLoader},
         util::{fe_to_limbs, read_proof_instances, read_protocol, read_public_signals},
     };
-    use ff::{Field, PrimeField};
-    use halo2_curves::bn256::Fq;
+    use halo2_curves::bn256::{Bn256, Fq, G2Affine};
+    use halo2_kzg_srs::{Srs, SrsFormat};
     use halo2_proofs::dev::MockProver;
-    use num::BigUint;
-    use rand::SeedableRng;
-    use rand_chacha::{rand_core::RngCore, ChaCha12Rng};
+    use std::fs::File;
 
-    #[test]
-    fn circom_accumulation() {
-        let protocol = read_protocol("./test-files/verification_key.json");
-        let native_snarks: Vec<(Vec<u8>, Vec<Fr>)> =
-            read_proof_instances(vec!["./test-files/proof.json".to_string()])
-                .iter()
-                .zip(read_public_signals(vec![
-                    "./test-files/public.json".to_string()
-                ]))
-                .map(|(proof, public)| (proof.clone(), public))
-                .collect();
-        let snarks: Vec<SnarkWitness<G1>> =
-            read_proof_instances(vec!["./test-files/proof.json".to_string()])
-                .iter()
-                .zip(read_public_signals(vec![
-                    "./test-files/public.json".to_string()
-                ]))
-                .map(|(proof, public)| SnarkWitness {
-                    protocol: protocol.clone(),
-                    proof: Value::known(proof.clone()),
-                    public_signals: public.iter().map(|v| Value::known(*v)).collect(),
-                })
-                .collect();
+    fn prepare(
+        protocol: &str,
+        proofs: Vec<String>,
+        public_singals: Vec<String>,
+    ) -> (
+        kzg::CircomProtocol<G1>,
+        Vec<(Vec<u8>, Vec<Fr>)>,
+        SameCurveAccumulation<G1, NativeLoader>,
+    ) {
+        let protocol = read_protocol(protocol);
+        let native_snarks: Vec<(Vec<u8>, Vec<Fr>)> = read_proof_instances(proofs)
+            .iter()
+            .zip(read_public_signals(public_singals))
+            .map(|(proof, public)| (proof.clone(), public))
+            .collect();
 
         // Perform `Native` to check validity and calculate instance values.
         let mut strategy = SameCurveAccumulation::<G1, NativeLoader>::default();
         let native_loader = NativeLoader {};
-        for snark in native_snarks {
-            let mut t =
-                PoseidonTranscript::<G1Affine, NativeLoader, _, _>::init(snark.0.as_slice());
+        for snark in native_snarks.clone() {
             CircomPlonkAccumulationScheme::accumulate(
                 &protocol,
                 &native_loader,
@@ -194,14 +178,24 @@ mod tests {
                     .iter()
                     .map(|el| native_loader.load_const(el))
                     .collect(),
-                &mut t,
+                &mut PoseidonTranscript::<G1Affine, NativeLoader, _, _>::init(snark.0.as_slice()),
                 &mut strategy,
             )
             .unwrap();
         }
 
-        // strategy.decide(g1, g2, s_g2)
+        (protocol, native_snarks, strategy)
+    }
 
+    #[test]
+    fn circom_accumulation_halo2_constraints() {
+        let (protocol, native_snarks, strategy) = prepare(
+            "./src/fixture/verification_key.json",
+            vec!["./src/fixture/proof.json".to_string()],
+            vec!["./src/fixture/public.json".to_string()],
+        );
+
+        // Obtain lhs and rhs accumulator
         let (lhs, rhs) = strategy.finalize(G1::generator());
         let instance = [
             lhs.to_affine().x,
@@ -212,24 +206,38 @@ mod tests {
         .map(fe_to_limbs::<Fq, Fr, LIMBS, BITS>)
         .concat();
 
-        // Generate proof and verify
-
+        // Test the circuit
+        let snarks: Vec<SnarkWitness<G1>> = native_snarks
+            .iter()
+            .map(|(proof, public)| SnarkWitness {
+                protocol: protocol.clone(),
+                proof: Value::known(proof.clone()),
+                public_signals: public.iter().map(|v| Value::known(*v)).collect(),
+            })
+            .collect();
         let circuit = Accumulation {
             g1: G1Affine::generator(),
             snarks,
         };
         let k = 20;
-
         const ZK: bool = true;
         MockProver::run::<_, ZK>(k, &circuit, vec![instance])
             .unwrap()
             .assert_satisfied();
-
-        // TODO:
-        // (0) Provide instance values: LHS and RHS
-        // (1) halo2_kzg_create_snark to create snark proof
-        // (2) halo2_kzg_native_verify to verify the snakr proof and accumulation pairing
     }
 
-   
+    #[test]
+    fn circom_accumulation_native() {
+        let (_, _, strategy) = prepare(
+            "./src/fixture/verification_key.json",
+            vec!["./src/fixture/proof.json".to_string()],
+            vec!["./src/fixture/public.json".to_string()],
+        );
+
+        let srs = Srs::<Bn256>::read(
+            &mut File::open("./src/fixture/pot.ptau").unwrap(),
+            SrsFormat::SnarkJs,
+        );
+        strategy.decide::<Bn256>(G1Affine::generator(), G2Affine::generator(), srs.s_g2);
+    }
 }
