@@ -28,7 +28,8 @@ impl<C: Curve, const LIMBS: usize, const BITS: usize>
         s_g2: M::G2Affine,
     ) -> bool {
         let (lhs, rhs) = self.finalize(g1.to_curve());
-
+        // println!("{:#?} decide LHS", lhs);
+        // println!("{:#?} decide RHS", rhs);
         let g2 = M::G2Prepared::from(g2);
         let minus_s_g2 = M::G2Prepared::from(-s_g2);
 

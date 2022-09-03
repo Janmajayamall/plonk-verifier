@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::{
-    loader::{LoadedScalar, Loader},
+    loader::{LoadedEcPoint, LoadedScalar, Loader},
     scheme::kzg::{
         accumulation::{AccumulationStrategy, Accumulator},
         MSM,
@@ -30,6 +30,7 @@ pub struct Protocol<C: Curve> {
     pub S3: C,
 }
 
+#[derive(Debug)]
 pub struct Challenges<C: Curve, L: Loader<C>> {
     pub beta: L::LoadedScalar,
     pub alpha: L::LoadedScalar,
@@ -40,6 +41,7 @@ pub struct Challenges<C: Curve, L: Loader<C>> {
 }
 
 #[allow(non_snake_case)]
+#[derive(Debug)]
 pub struct CircomPlonkProof<C: Curve, L: Loader<C>> {
     A: L::LoadedEcPoint,
     B: L::LoadedEcPoint,
@@ -77,13 +79,16 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         // println!("Just read C: {:#?}", C);
 
         let beta = transcript.squeeze_challenge();
+        println!("beta: {:#?}", beta);
 
         transcript.common_scalar(&beta)?;
         let gamma = transcript.squeeze_challenge();
+        println!("gamma: {:#?}", gamma);
 
         let Z = transcript.read_ec_point()?;
         // println!("Just read Z: {:#?}", Z);
         let alpha = transcript.squeeze_challenge();
+        println!("alpha: {:#?}", alpha);
 
         let T1 = transcript.read_ec_point()?;
         // println!("Just read T1: {:#?}", T1);
@@ -92,22 +97,25 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         let T3 = transcript.read_ec_point()?;
         // println!("Just read T3: {:#?}", T3);
         let xi = transcript.squeeze_challenge();
+        println!("xi: {:#?}", xi);
 
         let eval_points = transcript.read_n_scalars(7)?;
-        // let eval_a = eval_points[0];
-        // let eval_b = eval_points[1];
-        // let eval_c = eval_points[2];
-        // let eval_s1 = eval_points[3];
-        // let eval_s2 = eval_points[4];
-        // let eval_zw = eval_points[5];
-        // let eval_r = eval_points[6];
+        // println!("Just read a: {:#?}", eval_points[0].clone());
+        // println!("Just read b: {:#?}", eval_points[1].clone());
+        // println!("Just read c: {:#?}", eval_points[2].clone());
+        // println!("Just read s1: {:#?}", eval_points[3].clone());
+        // println!("Just read s2: {:#?}", eval_points[4].clone());
+        // println!("Just read zw: {:#?}", eval_points[5].clone());
+        // println!("Just read r: {:#?}", eval_points[6].clone());
 
         let v = transcript.squeeze_challenge();
+        println!("v: {:#?}", v);
         let Wxi: L::LoadedEcPoint = transcript.read_ec_point()?;
         // println!("Just read WXI: {:#?}", Wxi);
         let Wxiw = transcript.read_ec_point()?;
         // println!("Just read WXIW: {:#?}", Wxiw);
         let u = transcript.squeeze_challenge();
+        println!("u: {:#?}", u);
 
         Ok(Self {
             A,
@@ -162,6 +170,8 @@ where
 
         let proof = CircomPlonkProof::read(public_signals, transcript)?;
 
+        // println!("Proof {:#?}", proof);
+
         let Qm = loader.ec_point_load_const(&protocol.Qm);
         let Ql = loader.ec_point_load_const(&protocol.Ql);
         let Qr = loader.ec_point_load_const(&protocol.Qr);
@@ -174,12 +184,15 @@ where
         let k2 = loader.load_const(&protocol.k2);
 
         let xi = proof.challenges.xi.clone();
+        let n = loader.load_const(&C::Scalar::from(protocol.domain.n as u64));
         let n_inv = loader.load_const(&protocol.domain.n_inv);
         let xi_power_n = xi.clone().pow_const(protocol.domain.n as u64);
         let omega = loader.load_const(&protocol.domain.gen);
+        println!("omega {:#?}", omega);
         let omega_inv = loader.load_const(&protocol.domain.gen_inv);
+        println!("omega_inv {:#?}", omega_inv);
         let omega_inv_powers = omega_inv.clone().powers(public_signals.len());
-
+        println!("omega_inv_powers {:#?}", omega_inv_powers);
         // z_h(xi) = xi^n - 1;
         let one = loader.load_one();
         let z_h_eval_xi = xi_power_n.clone() - one.clone();
@@ -193,35 +206,27 @@ where
         //
         // More info on this - https://github.com/ZK-Garage/plonk/blob/79dffa1bacbe73ab42e2d7e48194efe5c0070bd6/plonk-core/src/proof_system/proof.rs#L622
         let l1_eval_xi = {
-            let denom = xi.clone() - one.clone();
+            let denom = (xi.clone() - one.clone()) * n;
             z_h_eval_xi.clone() * denom.invert().unwrap()
         };
+        println!("l1_eval_xi {:#?}", l1_eval_xi);
 
         // Compute public input poly evaluation at `xi`.
         // We do this using `barycentric evaluation` approach.
         // For more details on this approach check following:
         //  (1) https://hackmd.io/@vbuterin/barycentric_evaluation
         //  (2) https://github.com/ZK-Garage/plonk/blob/79dffa1bacbe73ab42e2d7e48194efe5c0070bd6/plonk-core/src/proof_system/proof.rs#L635
-        //
-        // TODO: We store `omegas` in `vk`. We only need them at this
-        // step of verification. This means we shall only load omages
-        // omegas_inv for range (0..public_inputs.length). Implement this
-        // optimization.
         let pi_poly_eval_xi = {
-            // (xi^n - 1) / n
-            //
-            // TODO: store `n.invert()` in `vk` to avoid
-            // having to constrain it in every accumulation step.
-            let numerator = z_h_eval_xi.clone() * n_inv.clone();
-
             // In case of no public inputs PI(x)
             // can be reduced to
             // PI(x) = (x^n - 1) / n
-            if public_signals.len() == 0 {
-                numerator
+            if public_signals.is_empty() {
+                loader.load_zero()
             } else {
+                // (xi^n - 1) / n
+                let numerator = z_h_eval_xi.clone() * n_inv.clone();
                 let denominator = {
-                    let denoms: Vec<L::LoadedScalar> = (0..public_signals.len())
+                    let denoms_inv: Vec<L::LoadedScalar> = (0..public_signals.len())
                         .map(|index| {
                             // (xi - omega^j) * omega^-j => (omega^-j * xi - 1)
                             // for `j`th index.
@@ -231,20 +236,23 @@ where
                         })
                         .collect();
 
+                    println!("PI denom_inv {:#?}", denoms_inv);
+
                     // Computes
                     // `sum_of { pi_j * (xi * omega^-j - 1)^-1 }`
                     // for j in range 0..public_signals.len()
-                    let mut sum = denoms[0].clone() * public_signals[0].clone();
-                    denoms.iter().enumerate().for_each(|(index, d)| {
-                        if index > 1 {
-                            sum = d.clone() * public_signals[index].clone();
+                    let mut sum = denoms_inv[0].clone() * public_signals[0].clone();
+                    denoms_inv.iter().enumerate().for_each(|(index, d)| {
+                        if index > 0 {
+                            sum += d.clone() * public_signals[index].clone();
                         }
                     });
                     sum
                 };
-                numerator * denominator
+                -numerator * denominator
             }
         };
+        println!("pi_poly_eval_xi {:#?}", pi_poly_eval_xi);
 
         // Compute pairing rhs
         let rhs = {
@@ -267,11 +275,11 @@ where
                 let b = proof.eval_b.clone()
                     + (proof.challenges.beta.clone() * k1.clone() * proof.challenges.xi.clone())
                     + proof.challenges.gamma.clone();
-                let c = proof.eval_b.clone()
+                let c = proof.eval_c.clone()
                     + (proof.challenges.beta.clone() * k2.clone() * proof.challenges.xi.clone())
                     + proof.challenges.gamma.clone();
                 let val = a * b * c * alpha.clone();
-                let val2 = l1_eval_xi.clone() * alpha_square.clone() + proof.challenges.u.clone();
+                let val2 = (l1_eval_xi.clone() * alpha_square.clone()) + proof.challenges.u.clone();
                 val + val2
             };
             rhs.push(scalar_batch_poly_commit_identity, proof.Z.clone());
@@ -283,7 +291,7 @@ where
                 let b = proof.eval_b.clone()
                     + (proof.challenges.beta.clone() * proof.eval_s2.clone())
                     + proof.challenges.gamma.clone();
-                a * b * alpha.clone() * proof.eval_zw.clone()
+                a * b * alpha.clone() * proof.challenges.beta.clone() * proof.eval_zw.clone()
             };
             rhs.push(scalar_batch_poly_commit_permuted.neg(), S3);
 
@@ -296,6 +304,8 @@ where
 
             // powers of `v`
             let v_powers = proof.challenges.v.powers(6);
+            println!("challenges.v {:#?}", proof.challenges.v);
+            println!("v_powers {:#?}", v_powers);
 
             rhs.push(v_powers[1].clone(), proof.A.clone());
             rhs.push(v_powers[2].clone(), proof.B.clone());
@@ -313,27 +323,28 @@ where
                 let p2 = proof.eval_b.clone()
                     + (proof.challenges.beta.clone() * proof.eval_s2.clone())
                     + proof.challenges.gamma.clone();
-                let p3 =
-                    (proof.eval_c.clone() + proof.challenges.gamma.clone()) * proof.eval_zw.clone();
-                let pp = p1 * p2 * p3 * alpha.clone();
+                let p3 = (proof.eval_c.clone() + proof.challenges.gamma.clone());
+                let pp = p1 * p2 * p3 * alpha.clone() * proof.eval_zw.clone();
 
-                pi_poly_eval_xi - l1_alpha_sq - pp
+                pi_poly_eval_xi - (l1_alpha_sq - pp)
             };
+            println!("r0 {:#?}", r0);
 
             let group_batch_eval_scalar = {
-                let mut sum = r0.neg() + (v_powers[1].clone() * proof.eval_a.clone());
+                let mut sum = v_powers[1].clone() * proof.eval_a.clone();
                 sum += v_powers[2].clone() * proof.eval_b.clone();
                 sum += v_powers[3].clone() * proof.eval_c.clone();
                 sum += v_powers[4].clone() * proof.eval_s1.clone();
                 sum += v_powers[5].clone() * proof.eval_s2.clone();
                 sum += proof.challenges.u.clone() * proof.eval_zw.clone();
-                sum.neg()
+                sum -= r0;
+                sum
             };
             rhs.push(group_batch_eval_scalar.neg(), loader.ec_point_load_one());
 
             let u_xi_omega = proof.challenges.u.clone() * xi.clone() * omega.clone();
             rhs.push(xi.clone(), proof.Wxi.clone());
-            rhs.push(u_xi_omega.clone(), proof.Wxi.clone());
+            rhs.push(u_xi_omega.clone(), proof.Wxiw.clone());
 
             rhs
         };
@@ -343,7 +354,10 @@ where
         lhs.push(one.clone(), proof.Wxi.clone());
         lhs.push(proof.challenges.u.clone(), proof.Wxiw.clone());
 
-        let accumulator = Accumulator::new(rhs, lhs);
+        println!("{:#?} LHS", lhs.clone().evaluate(C::generator()));
+        println!("{:#?} RHS", rhs.clone().evaluate(C::generator()));
+
+        let accumulator = Accumulator::new(lhs, rhs);
         strategy.process(loader, transcript, proof, accumulator)
     }
 }

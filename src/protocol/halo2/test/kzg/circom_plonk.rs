@@ -238,11 +238,11 @@ mod tests {
             "./src/fixture/verification_key.json",
             vec![
                 "./src/fixture/proof1.json".to_string(),
-                "./src/fixture/proof2.json".to_string(),
+                // "./src/fixture/proof2.json".to_string(),
             ],
             vec![
                 "./src/fixture/public1.json".to_string(),
-                "./src/fixture/public2.json".to_string(),
+                // "./src/fixture/public2.json".to_string(),
             ],
         );
 
@@ -250,6 +250,8 @@ mod tests {
             &mut File::open("./src/fixture/pot.ptau").unwrap(),
             SrsFormat::SnarkJs,
         );
-        strategy.decide::<Bn256>(G1Affine::generator(), G2Affine::generator(), srs.s_g2);
+        let d = strategy.decide::<Bn256>(G1Affine::generator(), G2Affine::generator(), srs.s_g2);
+        println!("{} isValid", d);
+        assert!(d);
     }
 }

@@ -1,6 +1,7 @@
 use super::Domain;
 use crate::{scheme::kzg::CircomProtocol, util::GroupEncoding};
 use ff::PrimeField;
+use group::Curve;
 use halo2_curves::bn256::{Fq, Fr, G1};
 use itertools::Itertools;
 use serde_json::Value;
@@ -16,15 +17,21 @@ pub fn json_to_bn256_g1(json: &Value, key: &str) -> G1 {
         .collect();
     assert_eq!(coords.len(), 3);
 
-    G1 {
+    let out = G1 {
         x: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
         y: Fq::from_str_vartime(coords[1].as_str()).unwrap(),
         z: Fq::from_str_vartime(coords[2].as_str()).unwrap(),
-    }
+    };
+
+    // println!("{}: {:#?} Affine", key, out.to_affine());
+
+    out
 }
 
 pub fn json_to_bn256_fr(json: &Value, key: &str) -> Fr {
-    Fr::from_str_vartime(json.get(key).unwrap().as_str().unwrap()).unwrap()
+    let v = Fr::from_str_vartime(json.get(key).unwrap().as_str().unwrap()).unwrap();
+    // println!("{}: {:#?}", key, v);
+    v
 }
 
 pub fn json_to_proof_instance(json: &Value) -> Vec<u8> {
