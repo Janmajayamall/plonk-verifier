@@ -1,11 +1,9 @@
+use super::Domain;
 use crate::{scheme::kzg::CircomProtocol, util::GroupEncoding};
 use ff::PrimeField;
-use halo2_curves::bn256::{Fq, Fr, G1, G2};
+use halo2_curves::bn256::{Fq, Fr, G1};
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use super::Domain;
 
 pub fn json_to_bn256_g1(json: &Value, key: &str) -> G1 {
     let coords: Vec<String> = json
@@ -17,21 +15,6 @@ pub fn json_to_bn256_g1(json: &Value, key: &str) -> G1 {
         .map(|i| i.as_str().unwrap().to_string())
         .collect();
     assert_eq!(coords.len(), 3);
-
-    // let d = G2 {
-    //     x: Fq2 {
-    //         c0: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
-    //         c1: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
-    //     },
-    //     y: Fq2 {
-    //         c0: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
-    //         c1: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
-    //     },
-    //     z: Fq2 {
-    //         c0: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
-    //         c1: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
-    //     },
-    // };
 
     G1 {
         x: Fq::from_str_vartime(coords[0].as_str()).unwrap(),
@@ -118,9 +101,7 @@ mod tests {
     use super::*;
     #[test]
     fn read() {
-        let cwd = std::env::current_dir().unwrap();
-        let cwd = cwd.to_str().unwrap();
-        let protocol = read_protocol(format!("{}/target/verification_key.json", cwd).as_str());
+        let protocol = read_protocol("./src/fixture/verification_key.json");
         println!("{:#?}", protocol.Qm);
     }
 }

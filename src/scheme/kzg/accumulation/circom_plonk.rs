@@ -1,8 +1,7 @@
+#![allow(non_snake_case)]
+
 use crate::{
-    loader::{
-        halo2::{Halo2Loader, PoseidonTranscript},
-        LoadedScalar, Loader,
-    },
+    loader::{LoadedScalar, Loader},
     scheme::kzg::{
         accumulation::{AccumulationStrategy, Accumulator},
         MSM,
@@ -10,17 +9,12 @@ use crate::{
     util::{Domain, TranscriptRead},
     Error,
 };
-use ff::PrimeField;
 use group::Curve;
-use halo2_curves::{
-    bn256::{Fq, Fr, G1Affine, G1},
-    FieldExt,
-};
-
 use std::marker::PhantomData;
 use std::ops::Neg;
 
 #[derive(Clone)]
+
 pub struct Protocol<C: Curve> {
     pub domain: Domain<C::Scalar>,
     pub public_inputs_count: usize,
@@ -45,6 +39,7 @@ pub struct Challenges<C: Curve, L: Loader<C>> {
     pub u: L::LoadedScalar,
 }
 
+#[allow(non_snake_case)]
 pub struct CircomPlonkProof<C: Curve, L: Loader<C>> {
     A: L::LoadedEcPoint,
     B: L::LoadedEcPoint,
@@ -179,7 +174,6 @@ where
         let k2 = loader.load_const(&protocol.k2);
 
         let xi = proof.challenges.xi.clone();
-        let n = loader.load_const(&C::Scalar::from(protocol.domain.n as u64));
         let n_inv = loader.load_const(&protocol.domain.n_inv);
         let xi_power_n = xi.clone().pow_const(protocol.domain.n as u64);
         let omega = loader.load_const(&protocol.domain.gen);
@@ -328,11 +322,11 @@ where
 
             let group_batch_eval_scalar = {
                 let mut sum = r0.neg() + (v_powers[1].clone() * proof.eval_a.clone());
-                sum = sum + (v_powers[2].clone() * proof.eval_b.clone());
-                sum = sum + (v_powers[3].clone() * proof.eval_c.clone());
-                sum = sum + (v_powers[4].clone() * proof.eval_s1.clone());
-                sum = sum + (v_powers[5].clone() * proof.eval_s2.clone());
-                sum = sum + (proof.challenges.u.clone() * proof.eval_zw.clone());
+                sum += v_powers[2].clone() * proof.eval_b.clone();
+                sum += v_powers[3].clone() * proof.eval_c.clone();
+                sum += v_powers[4].clone() * proof.eval_s1.clone();
+                sum += v_powers[5].clone() * proof.eval_s2.clone();
+                sum += proof.challenges.u.clone() * proof.eval_zw.clone();
                 sum.neg()
             };
             rhs.push(group_batch_eval_scalar.neg(), loader.ec_point_load_one());
@@ -355,6 +349,4 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-}
+mod tests {}

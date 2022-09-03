@@ -191,8 +191,14 @@ mod tests {
     fn circom_accumulation_halo2_constraints() {
         let (protocol, native_snarks, strategy) = prepare(
             "./src/fixture/verification_key.json",
-            vec!["./src/fixture/proof.json".to_string()],
-            vec!["./src/fixture/public.json".to_string()],
+            vec![
+                "./src/fixture/proof1.json".to_string(),
+                "./src/fixture/proof2.json".to_string(),
+            ],
+            vec![
+                "./src/fixture/public1.json".to_string(),
+                "./src/fixture/public2.json".to_string(),
+            ],
         );
 
         // Obtain lhs and rhs accumulator
@@ -230,8 +236,14 @@ mod tests {
     fn circom_accumulation_native() {
         let (_, _, strategy) = prepare(
             "./src/fixture/verification_key.json",
-            vec!["./src/fixture/proof.json".to_string()],
-            vec!["./src/fixture/public.json".to_string()],
+            vec![
+                "./src/fixture/proof1.json".to_string(),
+                "./src/fixture/proof2.json".to_string(),
+            ],
+            vec![
+                "./src/fixture/public1.json".to_string(),
+                "./src/fixture/public2.json".to_string(),
+            ],
         );
 
         let srs = Srs::<Bn256>::read(
