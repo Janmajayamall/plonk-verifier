@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::{
-    loader::{LoadedEcPoint, LoadedScalar, Loader},
+    loader::{LoadedScalar, Loader},
     scheme::kzg::{
         accumulation::{AccumulationStrategy, Accumulator},
         MSM,
@@ -11,7 +11,6 @@ use crate::{
 };
 use group::Curve;
 use std::marker::PhantomData;
-use std::ops::Neg;
 
 #[derive(Clone)]
 
@@ -171,7 +170,6 @@ where
         let proof = CircomPlonkProof::read(public_signals, transcript)?;
 
         // println!("Proof {:#?}", proof);
-
         let Qm = loader.ec_point_load_const(&protocol.Qm);
         let Ql = loader.ec_point_load_const(&protocol.Ql);
         let Qr = loader.ec_point_load_const(&protocol.Qr);
@@ -188,14 +186,21 @@ where
         let n_inv = loader.load_const(&protocol.domain.n_inv);
         let xi_power_n = xi.clone().pow_const(protocol.domain.n as u64);
         let omega = loader.load_const(&protocol.domain.gen);
-        println!("omega {:#?}", omega);
         let omega_inv = loader.load_const(&protocol.domain.gen_inv);
-        println!("omega_inv {:#?}", omega_inv);
         let omega_inv_powers = omega_inv.clone().powers(public_signals.len());
+
+        println!("domain {:#?}", protocol.domain);
+        println!("omega {:#?}", omega);
+        println!("omega_inv {:#?}", omega_inv);
         println!("omega_inv_powers {:#?}", omega_inv_powers);
+
         // z_h(xi) = xi^n - 1;
         let one = loader.load_one();
         let z_h_eval_xi = xi_power_n.clone() - one.clone();
+        let z_h_eval_xi_inv = z_h_eval_xi
+            .clone()
+            .invert()
+            .unwrap_or_else(|| z_h_eval_xi.clone());
 
         // Compute first lagrange evaluation.
         // Snarkjs's plonk prover starts with `omega^0`
@@ -236,8 +241,6 @@ where
                         })
                         .collect();
 
-                    println!("PI denom_inv {:#?}", denoms_inv);
-
                     // Computes
                     // `sum_of { pi_j * (xi * omega^-j - 1)^-1 }`
                     // for j in range 0..public_signals.len()
@@ -254,105 +257,121 @@ where
         };
         println!("pi_poly_eval_xi {:#?}", pi_poly_eval_xi);
 
-        // Compute pairing rhs
-        let rhs = {
-            let mut rhs = MSM::default();
+        let alpha_square = proof.challenges.alpha.clone().square();
 
-            let ab = proof.eval_a.clone() * proof.eval_b.clone();
-            rhs.push(ab, Qm);
-            rhs.push(proof.eval_a.clone(), Ql);
-            rhs.push(proof.eval_b.clone(), Qr);
-            rhs.push(proof.eval_c.clone(), Qo);
-            rhs.push(one.clone(), Qc);
+        // powers of `v`
+        let v_powers = proof.challenges.v.powers(7);
+        println!("challenges.v {:#?}", proof.challenges.v);
+        println!("v_powers {:#?}", v_powers);
 
-            let alpha = proof.challenges.alpha.clone();
-            let alpha_square = proof.challenges.alpha.clone().square();
-
-            let scalar_batch_poly_commit_identity = {
-                let a = proof.eval_a.clone()
-                    + (proof.challenges.beta.clone() * proof.challenges.xi.clone())
-                    + proof.challenges.gamma.clone();
-                let b = proof.eval_b.clone()
-                    + (proof.challenges.beta.clone() * k1.clone() * proof.challenges.xi.clone())
-                    + proof.challenges.gamma.clone();
-                let c = proof.eval_c.clone()
-                    + (proof.challenges.beta.clone() * k2.clone() * proof.challenges.xi.clone())
-                    + proof.challenges.gamma.clone();
-                let val = a * b * c * alpha.clone();
-                let val2 = (l1_eval_xi.clone() * alpha_square.clone()) + proof.challenges.u.clone();
-                val + val2
-            };
-            rhs.push(scalar_batch_poly_commit_identity, proof.Z.clone());
-
-            let scalar_batch_poly_commit_permuted = {
-                let a = proof.eval_a.clone()
-                    + (proof.challenges.beta.clone() * proof.eval_s1.clone())
-                    + proof.challenges.gamma.clone();
-                let b = proof.eval_b.clone()
+        // t
+        let t = {
+            let e = (proof.eval_a.clone()
+                + (proof.challenges.beta.clone() * proof.eval_s1.clone())
+                + proof.challenges.gamma.clone())
+                * (proof.eval_b.clone()
                     + (proof.challenges.beta.clone() * proof.eval_s2.clone())
-                    + proof.challenges.gamma.clone();
-                a * b * alpha.clone() * proof.challenges.beta.clone() * proof.eval_zw.clone()
-            };
-            rhs.push(scalar_batch_poly_commit_permuted.neg(), S3);
+                    + proof.challenges.gamma.clone())
+                * (proof.eval_c.clone() + proof.challenges.gamma.clone())
+                * proof.eval_zw.clone()
+                * proof.challenges.alpha.clone();
+            let num = (proof.eval_r.clone() + pi_poly_eval_xi.clone())
+                - e
+                - (l1_eval_xi.clone() * alpha_square.clone());
+            num * z_h_eval_xi_inv
+        };
+        println!("t: {:#?}", t.clone());
 
-            let neg_z_h_eval_xi = z_h_eval_xi.clone().neg();
-            let neg_z_h_eval_xi_by_xi = neg_z_h_eval_xi.clone() * xi_power_n.clone();
-            let neg_z_h_eval_xi_by_xi_2n = neg_z_h_eval_xi.clone() * xi_power_n.clone().square();
-            rhs.push(neg_z_h_eval_xi.clone(), proof.T1.clone());
-            rhs.push(neg_z_h_eval_xi_by_xi, proof.T2.clone());
-            rhs.push(neg_z_h_eval_xi_by_xi_2n, proof.T3.clone());
+        let D: MSM<C, L> = {
+            let v_1 = v_powers[1].clone();
+            let beta_xi = proof.challenges.beta.clone() * proof.challenges.xi.clone();
 
-            // powers of `v`
-            let v_powers = proof.challenges.v.powers(6);
-            println!("challenges.v {:#?}", proof.challenges.v);
-            println!("v_powers {:#?}", v_powers);
-
-            rhs.push(v_powers[1].clone(), proof.A.clone());
-            rhs.push(v_powers[2].clone(), proof.B.clone());
-            rhs.push(v_powers[3].clone(), proof.C.clone());
-            rhs.push(v_powers[4].clone(), S1);
-            rhs.push(v_powers[5].clone(), S2);
-
-            let r0 = {
-                let l1_alpha_sq = l1_eval_xi * alpha_square;
-
-                // permutation product
-                let p1 = proof.eval_a.clone()
+            let mut d = MSM::default();
+            d.push(
+                proof.eval_a.clone() * proof.eval_b.clone() * v_1.clone(),
+                Qm.clone(),
+            );
+            d.push(proof.eval_a.clone() * v_1.clone(), Ql.clone());
+            d.push(proof.eval_b.clone() * v_1.clone(), Qr.clone());
+            d.push(proof.eval_c.clone() * v_1.clone(), Qo.clone());
+            d.push(v_1.clone(), Qc.clone());
+            d.push(
+                ((proof.eval_a.clone() + beta_xi.clone() + proof.challenges.gamma.clone())
+                    * (proof.eval_b.clone()
+                        + (beta_xi.clone() * k1.clone())
+                        + proof.challenges.gamma.clone())
+                    * (proof.eval_c.clone()
+                        + (beta_xi.clone() * k2.clone())
+                        + proof.challenges.gamma.clone())
+                    * proof.challenges.alpha.clone()
+                    * v_1.clone())
+                    + (l1_eval_xi.clone() * alpha_square.clone() * v_1.clone())
+                    + proof.challenges.u.clone(),
+                proof.Z.clone(),
+            );
+            d.push(
+                -((proof.eval_a.clone()
                     + (proof.challenges.beta.clone() * proof.eval_s1.clone())
-                    + proof.challenges.gamma.clone();
-                let p2 = proof.eval_b.clone()
-                    + (proof.challenges.beta.clone() * proof.eval_s2.clone())
-                    + proof.challenges.gamma.clone();
-                let p3 = (proof.eval_c.clone() + proof.challenges.gamma.clone());
-                let pp = p1 * p2 * p3 * alpha.clone() * proof.eval_zw.clone();
+                    + proof.challenges.gamma.clone())
+                    * (proof.eval_b.clone()
+                        + (proof.challenges.beta.clone() * proof.eval_s2.clone())
+                        + proof.challenges.gamma.clone())
+                    * proof.challenges.alpha.clone()
+                    * v_1.clone()
+                    * proof.challenges.beta.clone()
+                    * proof.eval_zw.clone()),
+                S3.clone(),
+            );
 
-                pi_poly_eval_xi - (l1_alpha_sq - pp)
-            };
-            println!("r0 {:#?}", r0);
-
-            let group_batch_eval_scalar = {
-                let mut sum = v_powers[1].clone() * proof.eval_a.clone();
-                sum += v_powers[2].clone() * proof.eval_b.clone();
-                sum += v_powers[3].clone() * proof.eval_c.clone();
-                sum += v_powers[4].clone() * proof.eval_s1.clone();
-                sum += v_powers[5].clone() * proof.eval_s2.clone();
-                sum += proof.challenges.u.clone() * proof.eval_zw.clone();
-                sum -= r0;
-                sum
-            };
-            rhs.push(group_batch_eval_scalar.neg(), loader.ec_point_load_one());
-
-            let u_xi_omega = proof.challenges.u.clone() * xi.clone() * omega.clone();
-            rhs.push(xi.clone(), proof.Wxi.clone());
-            rhs.push(u_xi_omega.clone(), proof.Wxiw.clone());
-
-            rhs
+            d
         };
 
-        // Compute pairing lhs
+        let res: L::LoadedEcPoint = D.clone().evaluate(C::generator());
+        println!("D: {:#?}", res);
+
+        let F: MSM<C, L> = {
+            let mut res = MSM::default();
+            res.push(one.clone(), proof.T1.clone());
+            res.push(xi_power_n.clone(), proof.T2.clone());
+            res.push(xi_power_n.clone().square(), proof.T3.clone());
+            res.push(v_powers[2].clone(), proof.A.clone());
+            res.push(v_powers[3].clone(), proof.B.clone());
+            res.push(v_powers[4].clone(), proof.C.clone());
+            res.push(v_powers[5].clone(), S1.clone());
+            res.push(v_powers[6].clone(), S2.clone());
+            res.extend(D);
+            res
+        };
+
+        let res = F.clone().evaluate(C::generator());
+        println!("F: {:#?}", res);
+
+        let e_scalar = t
+            + (v_powers[1].clone() * proof.eval_r.clone())
+            + (v_powers[2].clone() * proof.eval_a.clone())
+            + (v_powers[3].clone() * proof.eval_b.clone())
+            + (v_powers[4].clone() * proof.eval_c.clone())
+            + (v_powers[5].clone() * proof.eval_s1.clone())
+            + (v_powers[6].clone() * proof.eval_s2.clone())
+            + (proof.challenges.u.clone() * proof.eval_zw.clone());
+
+        println!("e_scalar: {:#?}", e_scalar);
+        let mut E_t: MSM<C, L> = MSM::default();
+        E_t.push(e_scalar.clone(), loader.ec_point_load_one());
+        println!("E: {:#?}", E_t.evaluate(C::generator()));
+
         let mut lhs = MSM::default();
-        lhs.push(one.clone(), proof.Wxi.clone());
-        lhs.push(proof.challenges.u.clone(), proof.Wxiw.clone());
+        lhs.push(proof.challenges.xi.clone(), proof.Wxi.clone());
+        lhs.push(
+            proof.challenges.u.clone() * proof.challenges.xi.clone() * omega.clone(),
+            proof.Wxiw.clone(),
+        );
+        lhs.extend(F);
+        lhs.push(-e_scalar, loader.ec_point_load_one());
+
+        let mut rhs = MSM::default();
+        rhs.push(one.clone(), proof.Wxi.clone());
+        rhs.push(proof.challenges.u.clone(), proof.Wxiw.clone());
 
         println!("{:#?} LHS", lhs.clone().evaluate(C::generator()));
         println!("{:#?} RHS", rhs.clone().evaluate(C::generator()));

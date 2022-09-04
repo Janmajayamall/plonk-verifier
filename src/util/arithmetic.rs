@@ -124,10 +124,14 @@ impl<F: PrimeField> Domain<F> {
 
         let n = 1 << k;
         let n_inv = F::from(n as u64).invert().unwrap();
-        let gen = iter::successors(Some(F::root_of_unity()), |acc| Some(acc.square()))
-            .take(F::S as usize - k + 1)
-            .last()
-            .unwrap();
+        // let gen = iter::successors(Some(F::root_of_unity()), |acc| Some(acc.square()))
+        //     .take(F::S as usize - k + 1)
+        //     .last()
+        //     .unwrap();
+        let gen = F::from_str_vartime(
+            "1120550406532664055539694724667294622065367841900378087843176726913374367458",
+        )
+        .unwrap();
         debug_assert_eq!(gen.pow_vartime([n as u64]), F::one());
         let gen_inv = gen.invert().unwrap();
 
