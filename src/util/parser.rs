@@ -1,7 +1,6 @@
-use super::Domain;
+use super::{arithmetic::DomainType, Domain};
 use crate::{scheme::kzg::CircomProtocol, util::GroupEncoding};
 use ff::PrimeField;
-use group::Curve;
 use halo2_curves::bn256::{Fq, Fr, G1};
 use itertools::Itertools;
 use serde_json::Value;
@@ -60,7 +59,10 @@ pub fn read_protocol(path: &str) -> CircomProtocol<G1> {
     let json: Value = serde_json::from_str(&json).unwrap();
 
     CircomProtocol {
-        domain: Domain::<Fr>::new(json.get("power").unwrap().as_u64().unwrap() as usize),
+        domain: Domain::<Fr>::new(
+            json.get("power").unwrap().as_u64().unwrap() as usize,
+            DomainType::Circom,
+        ),
         public_inputs_count: json.get("nPublic").unwrap().as_u64().unwrap() as usize,
         k1: json_to_bn256_fr(&json, "k1"),
         k2: json_to_bn256_fr(&json, "k2"),

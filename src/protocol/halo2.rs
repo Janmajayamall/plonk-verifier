@@ -1,6 +1,6 @@
 use crate::{
     protocol::Protocol,
-    util::{CommonPolynomial, Domain, Expression, Itertools, Query, Rotation},
+    util::{CommonPolynomial, Domain, DomainType, Expression, Itertools, Query, Rotation},
 };
 use halo2_proofs::{
     arithmetic::{CurveAffine, CurveExt, FieldExt},
@@ -34,7 +34,7 @@ pub fn compile<C: CurveExt>(vk: &VerifyingKey<C::AffineExt>, config: Config) -> 
     } = config;
 
     let k = vk.get_domain().empty_lagrange().len().log2();
-    let domain = Domain::new(k as usize);
+    let domain = Domain::new(k as usize, DomainType::Halo2);
 
     let preprocessed = vk
         .fixed_commitments()

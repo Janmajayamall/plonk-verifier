@@ -5,8 +5,8 @@ mod transcript;
 
 pub use arithmetic::{
     batch_invert, batch_invert_and_mul, fe_from_limbs, fe_to_limbs, BatchInvert, Curve, Domain,
-    Field, FieldOps, Fraction, Group, GroupEncoding, GroupOps, PrimeCurveAffine, PrimeField,
-    Rotation, UncompressedEncoding,
+    DomainType, Field, FieldOps, Fraction, Group, GroupEncoding, GroupOps, PrimeCurveAffine,
+    PrimeField, Rotation, UncompressedEncoding,
 };
 pub use expression::{CommonPolynomial, CommonPolynomialEvaluation, Expression, Query};
 pub use parser::{read_proof_instances, read_protocol, read_public_signals};

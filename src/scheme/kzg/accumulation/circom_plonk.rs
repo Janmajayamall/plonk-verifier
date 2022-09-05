@@ -78,16 +78,16 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         // println!("Just read C: {:#?}", C);
 
         let beta = transcript.squeeze_challenge();
-        println!("beta: {:#?}", beta);
+        // println!("beta: {:#?}", beta);
 
         transcript.common_scalar(&beta)?;
         let gamma = transcript.squeeze_challenge();
-        println!("gamma: {:#?}", gamma);
+        // println!("gamma: {:#?}", gamma);
 
         let Z = transcript.read_ec_point()?;
         // println!("Just read Z: {:#?}", Z);
         let alpha = transcript.squeeze_challenge();
-        println!("alpha: {:#?}", alpha);
+        // println!("alpha: {:#?}", alpha);
 
         let T1 = transcript.read_ec_point()?;
         // println!("Just read T1: {:#?}", T1);
@@ -96,7 +96,7 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         let T3 = transcript.read_ec_point()?;
         // println!("Just read T3: {:#?}", T3);
         let xi = transcript.squeeze_challenge();
-        println!("xi: {:#?}", xi);
+        // println!("xi: {:#?}", xi);
 
         let eval_points = transcript.read_n_scalars(7)?;
         // println!("Just read a: {:#?}", eval_points[0].clone());
@@ -108,13 +108,13 @@ impl<C: Curve, L: Loader<C>> CircomPlonkProof<C, L> {
         // println!("Just read r: {:#?}", eval_points[6].clone());
 
         let v = transcript.squeeze_challenge();
-        println!("v: {:#?}", v);
+        // println!("v: {:#?}", v);
         let Wxi: L::LoadedEcPoint = transcript.read_ec_point()?;
         // println!("Just read WXI: {:#?}", Wxi);
         let Wxiw = transcript.read_ec_point()?;
         // println!("Just read WXIW: {:#?}", Wxiw);
         let u = transcript.squeeze_challenge();
-        println!("u: {:#?}", u);
+        // println!("u: {:#?}", u);
 
         Ok(Self {
             A,
@@ -189,10 +189,10 @@ where
         let omega_inv = loader.load_const(&protocol.domain.gen_inv);
         let omega_inv_powers = omega_inv.clone().powers(public_signals.len());
 
-        println!("domain {:#?}", protocol.domain);
-        println!("omega {:#?}", omega);
-        println!("omega_inv {:#?}", omega_inv);
-        println!("omega_inv_powers {:#?}", omega_inv_powers);
+        // println!("domain {:#?}", protocol.domain);
+        // println!("omega {:#?}", omega);
+        // println!("omega_inv {:#?}", omega_inv);
+        // println!("omega_inv_powers {:#?}", omega_inv_powers);
 
         // z_h(xi) = xi^n - 1;
         let one = loader.load_one();
@@ -214,7 +214,7 @@ where
             let denom = (xi.clone() - one.clone()) * n;
             z_h_eval_xi.clone() * denom.invert().unwrap()
         };
-        println!("l1_eval_xi {:#?}", l1_eval_xi);
+        // println!("l1_eval_xi {:#?}", l1_eval_xi);
 
         // Compute public input poly evaluation at `xi`.
         // We do this using `barycentric evaluation` approach.
@@ -255,14 +255,14 @@ where
                 -numerator * denominator
             }
         };
-        println!("pi_poly_eval_xi {:#?}", pi_poly_eval_xi);
+        // println!("pi_poly_eval_xi {:#?}", pi_poly_eval_xi);
 
         let alpha_square = proof.challenges.alpha.clone().square();
 
         // powers of `v`
         let v_powers = proof.challenges.v.powers(7);
-        println!("challenges.v {:#?}", proof.challenges.v);
-        println!("v_powers {:#?}", v_powers);
+        // println!("challenges.v {:#?}", proof.challenges.v);
+        // println!("v_powers {:#?}", v_powers);
 
         // t
         let t = {
@@ -280,7 +280,7 @@ where
                 - (l1_eval_xi.clone() * alpha_square.clone());
             num * z_h_eval_xi_inv
         };
-        println!("t: {:#?}", t.clone());
+        // println!("t: {:#?}", t.clone());
 
         let D: MSM<C, L> = {
             let v_1 = v_powers[1].clone();
@@ -326,8 +326,8 @@ where
             d
         };
 
-        let res: L::LoadedEcPoint = D.clone().evaluate(C::generator());
-        println!("D: {:#?}", res);
+        // let res: L::LoadedEcPoint = D.clone().evaluate(C::generator());
+        // println!("D: {:#?}", res);
 
         let F: MSM<C, L> = {
             let mut res = MSM::default();
@@ -343,8 +343,8 @@ where
             res
         };
 
-        let res = F.clone().evaluate(C::generator());
-        println!("F: {:#?}", res);
+        // let res = F.clone().evaluate(C::generator());
+        // println!("F: {:#?}", res);
 
         let e_scalar = t
             + (v_powers[1].clone() * proof.eval_r.clone())
@@ -355,10 +355,7 @@ where
             + (v_powers[6].clone() * proof.eval_s2.clone())
             + (proof.challenges.u.clone() * proof.eval_zw.clone());
 
-        println!("e_scalar: {:#?}", e_scalar);
-        let mut E_t: MSM<C, L> = MSM::default();
-        E_t.push(e_scalar.clone(), loader.ec_point_load_one());
-        println!("E: {:#?}", E_t.evaluate(C::generator()));
+        // println!("e_scalar: {:#?}", e_scalar);
 
         let mut lhs = MSM::default();
         lhs.push(proof.challenges.xi.clone(), proof.Wxi.clone());
@@ -373,8 +370,8 @@ where
         rhs.push(one.clone(), proof.Wxi.clone());
         rhs.push(proof.challenges.u.clone(), proof.Wxiw.clone());
 
-        println!("{:#?} LHS", lhs.clone().evaluate(C::generator()));
-        println!("{:#?} RHS", rhs.clone().evaluate(C::generator()));
+        // println!("{:#?} LHS", lhs.clone().evaluate(C::generator()));
+        // println!("{:#?} RHS", rhs.clone().evaluate(C::generator()));
 
         let accumulator = Accumulator::new(lhs, rhs);
         strategy.process(loader, transcript, proof, accumulator)

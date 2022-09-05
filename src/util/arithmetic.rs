@@ -1,4 +1,5 @@
 use crate::util::Itertools;
+
 use num_bigint::BigUint;
 use num_traits::One;
 use std::{
@@ -109,6 +110,33 @@ impl From<i32> for Rotation {
     }
 }
 
+pub enum DomainType {
+    Circom,
+    Halo2,
+}
+
+pub fn circom_gen<F: PrimeField>(k: usize) -> F {
+    let modulus = BigUint::from_bytes_le((-F::one()).to_repr().as_ref()) + BigUint::one();
+    let modulus_half = (modulus.clone() / BigUint::from(2_u32)).to_u64_digits();
+    let t = ((modulus - BigUint::one()) / BigUint::from(2_u32).pow(F::S)).to_u64_digits();
+    let mut nqr = F::one();
+    while nqr.pow_vartime(modulus_half.clone()) == F::one() {
+        nqr += F::one();
+    }
+    let mut omega = nqr.pow_vartime(t);
+    (0..(F::S - k as u32)).for_each(|_| {
+        omega = omega.square();
+    });
+    omega
+}
+
+pub fn halo2_gen<F: PrimeField>(k: usize) -> F {
+    iter::successors(Some(F::root_of_unity()), |acc| Some(acc.square()))
+        .take(F::S as usize - k + 1)
+        .last()
+        .unwrap()
+}
+
 #[derive(Clone, Debug)]
 pub struct Domain<F: PrimeField> {
     pub k: usize,
@@ -119,19 +147,16 @@ pub struct Domain<F: PrimeField> {
 }
 
 impl<F: PrimeField> Domain<F> {
-    pub fn new(k: usize) -> Self {
+    pub fn new(k: usize, gen_type: DomainType) -> Self {
         assert!(k <= F::S as usize);
 
         let n = 1 << k;
         let n_inv = F::from(n as u64).invert().unwrap();
-        // let gen = iter::successors(Some(F::root_of_unity()), |acc| Some(acc.square()))
-        //     .take(F::S as usize - k + 1)
-        //     .last()
-        //     .unwrap();
-        let gen = F::from_str_vartime(
-            "1120550406532664055539694724667294622065367841900378087843176726913374367458",
-        )
-        .unwrap();
+
+        let gen = match gen_type {
+            DomainType::Circom => circom_gen::<F>(k),
+            DomainType::Halo2 => halo2_gen::<F>(k),
+        };
         debug_assert_eq!(gen.pow_vartime([n as u64]), F::one());
         let gen_inv = gen.invert().unwrap();
 
@@ -244,3 +269,17 @@ pub fn fe_to_limbs<F1: PrimeField, F2: PrimeField, const LIMBS: usize, const BIT
         .try_into()
         .unwrap()
 }
+
+//   let mod_half: Vec<u64> = F::from_str_vartime(
+//             "10944121435919637611123202872628637544274182200208017171849102093287904247808",
+//         )
+//         .unwrap()
+//         .to_repr()
+//         .as_ref()
+//         .chunks_exact(8)
+//         .map(|limb| {
+//             let mut tmp: [u8; 8];
+//             tmp.clone_from_slice(limb);
+//             u64::from_le_bytes(tmp)
+//         })
+//         .collect();
