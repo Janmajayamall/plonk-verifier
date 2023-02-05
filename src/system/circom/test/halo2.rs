@@ -307,10 +307,10 @@ impl Circuit<Fr> for Accumulation {
 #[test]
 fn test() {
     let k = 21;
-    let circuit = Accumulation::new(TESTDATA_HALO2_INCORRECT);
+    let circuit = Accumulation::new(TESTDATA_HALO2_CORRECT);
     // let circuit = Accumulation::new(TESTDATA_HALO2_CORRECT);
 
-    // let _mock_prover = MockProver::run(k, &circuit, vec![circuit.instances.clone()]).unwrap();
+    let _mock_prover = MockProver::run(k, &circuit, vec![circuit.instances.clone()]).unwrap();
     // FIXME: Make sure either vk or proof doesn't contain ec point at infinity.
     // _mock_prover.assert_satisfied();
 }
